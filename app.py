@@ -1,7 +1,6 @@
 import os
 import openpyxl
 from flask import Flask, render_template_string
-import pandas as pd
 
 app = Flask(__name__)
 
@@ -12,8 +11,43 @@ def index():
   wb = openpyxl.load_workbook(archivo, data_only=True)
   sheet = wb.active
 
-  # Convertimos la hoja completa a una estructura de datos para la tabla web
-  data = list(sheet.values)
+  # Generamos una tabla HTML que mapea cada celda y su contenido exacto
+  html_rows = []
+  max_row = sheet.max_row
+  max_col = sheet.max_column
+
+  for r in range(1, max_row + 1):
+    row_cells = []
+    has_data = False
+    for c in range(1, max_col + 1):
+      cell = sheet.cell(row=r, column=c)
+      val = cell.value
+
+      if val is not None:
+        has_data = True
+
+      # Formato de celda (si es booleano, ponemos casilla; si no, el texto)
+      if isinstance(val, bool):
+        checked = "checked" if val else ""
+        content = f'<input type="checkbox" {checked} disabled style="transform: scale(0.9);">'
+      elif val is not None:
+        content = str(val)
+      else:
+        content = ""
+
+      # Estilos básicos heredados de la celda
+      style = ""
+      if cell.font and cell.font.bold:
+        style += "font-weight: bold;"
+      if cell.alignment and cell.alignment.horizontal:
+        style += f"text-align: {cell.alignment.horizontal};"
+
+      row_cells.append(f"<td style='{style}'>{content}</td>")
+
+    if has_data:
+      html_rows.append(f"<tr>{''.join(row_cells)}</tr>")
+
+  tabla_html = f"<table class='excel-native-table'>{''.join(html_rows)}</table>"
 
   template = """
     <!DOCTYPE html>
@@ -21,115 +55,49 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Inventario La 48 - Vista Excel</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <title>Inventario La 48</title>
         <style>
             body { 
-                background-color: #f3f3f3; 
-                font-family: 'Calibri', Arial, sans-serif; 
-                margin: 0;
-                padding: 10px;
+                background-color: #f5f5f5; 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
             }
-            .excel-window {
+            .excel-viewer {
                 background: white;
-                border: 1px solid #ccc;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                padding: 15px;
                 border-radius: 4px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                 max-width: 100%;
-                margin: auto;
-                overflow: hidden;
+                overflow-x: auto;
             }
-            .excel-header-bar {
-                background-color: #107c41;
-                color: white;
-                padding: 10px 15px;
-                font-size: 16px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            }
-            .excel-container {
-                max-height: 80vh;
-                overflow: auto;
-                background-color: #fff;
-            }
-            table.excel-grid {
+            table.excel-native-table {
                 border-collapse: collapse;
-                width: 100%;
-                table-layout: fixed;
+                width: auto;
+                font-size: 13px;
+                background-color: #ffffff;
             }
-            table.excel-grid th, table.excel-grid td {
+            table.excel-native-table td {
                 border: 1px solid #d4d4d4;
-                padding: 5px 8px;
-                font-size: 12px;
-                overflow: hidden;
-                text-overflow: ellipsis;
+                padding: 6px 10px;
                 white-space: nowrap;
+                color: #000;
             }
-            /* Fila y columna de índices estilo Excel (A, B, C... 1, 2, 3...) */
-            table.excel-grid th {
-                background-color: #f2f2f2;
-                color: #333;
-                text-align: center;
-                font-weight: normal;
-                position: sticky;
-                top: 0;
-                z-index: 10;
-            }
-            table.excel-grid td:first-child, table.excel-grid th:first-child {
-                background-color: #f2f2f2;
-                width: 40px;
-                text-align: center;
-                color: #555;
-                position: sticky;
-                left: 0;
-                z-index: 5;
-            }
-            table.excel-grid tr:hover {
-                background-color: #f9fbfd;
+            table.excel-native-table tr:hover {
+                background-color: #f1f3f5;
             }
         </style>
     </head>
     <body>
-        <div class="excel-window">
-            <div class="excel-header-bar">
-                <span>🟢 INVENTARIO LA 48 (Solo Vista)</span>
-                <span style="font-size: 12px; font-weight: normal;">Modo Seguro</span>
-            </div>
-            <div class="excel-container">
-                <table class="excel-grid">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            {% for col in range(1, data[0]|length + 1) %}
-                                <th>{{ col }}</th>
-                            {% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row_idx in range(data|length) %}
-                        <tr>
-                            <td>{{ row_idx + 1 }}</td>
-                            {% for cell in data[row_idx] %}
-                            <td>
-                                {% if cell is boolean %}
-                                    <input type="checkbox" {% if cell %}checked{% endif %} disabled style="transform: scale(0.9);">
-                                {% elif cell is not none %}
-                                    {{ cell }}
-                                {% endif %}
-                            </td>
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <div class="excel-viewer">
+            <div style="overflow-x: auto;">
+                {{ tabla_html | safe }}
             </div>
         </div>
     </body>
     </html>
     """
-  return render_template_string(template, data=data)
+  return render_template_string(template, tabla_html=tabla_html)
 
 
 if __name__ == "__main__":
