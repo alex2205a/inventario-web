@@ -1,6 +1,7 @@
 import os
 import openpyxl
 from flask import Flask, render_template_string
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -11,41 +12,8 @@ def index():
   wb = openpyxl.load_workbook(archivo, data_only=True)
   sheet = wb.active
 
-  # Construimos una tabla HTML que replica exactamente las filas y columnas de tu Excel
-  html_rows = []
-  for r in range(1, sheet.max_row + 1):
-    row_cells = []
-    has_content = False
-    for c in range(1, sheet.max_column + 1):
-      cell = sheet.cell(row=r, column=c)
-      val = cell.value
-
-      # Si la celda es un booleano (True/False), lo convertimos en un checkbox visual de Excel
-      if isinstance(val, bool):
-        checked = "checked" if val else ""
-        cell_content = (
-            f'<input type="checkbox" {checked} disabled class="form-check-input">'
-        )
-        has_content = True
-      elif val is not None:
-        cell_content = str(val)
-        has_content = True
-      else:
-        cell_content = ""
-        # Verificamos si tiene color de fondo o bordes en el Excel original
-
-      # Determinamos si es una celda de encabezado o título
-      tag = "td"
-      if r in [2, 6, 8, 9, 27, 30, 31, 32, 41, 42]:
-        if val is not None and str(val).strip() != "":
-          tag = "th"
-
-      row_cells.append(f"<{tag}>{cell_content}</{tag}>")
-
-    if has_content:
-      html_rows.append(f"<tr>{''.join(row_cells)}</tr>")
-
-  tabla_html = f"<table class='excel-table'>{''.join(html_rows)}</table>"
+  # Convertimos la hoja completa a una estructura de datos para la tabla web
+  data = list(sheet.values)
 
   template = """
     <!DOCTYPE html>
@@ -53,59 +21,115 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Inventario La 48</title>
+        <title>Inventario La 48 - Vista Excel</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             body { 
-                background-color: #f0f2f5; 
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                padding: 20px;
+                background-color: #f3f3f3; 
+                font-family: 'Calibri', Arial, sans-serif; 
+                margin: 0;
+                padding: 10px;
             }
-            .excel-container { 
-                max-width: 100%; 
-                margin: auto; 
-                background: white; 
-                padding: 20px; 
-                border-radius: 8px; 
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-                overflow-x: auto;
+            .excel-window {
+                background: white;
+                border: 1px solid #ccc;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                border-radius: 4px;
+                max-width: 100%;
+                margin: auto;
+                overflow: hidden;
             }
-            h2 { color: #1a1a1a; font-weight: bold; margin-bottom: 20px; text-align: center; }
-            
-            /* Estilo idéntico a una hoja de Excel */
-            .excel-table {
+            .excel-header-bar {
+                background-color: #107c41;
+                color: white;
+                padding: 10px 15px;
+                font-size: 16px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .excel-container {
+                max-height: 80vh;
+                overflow: auto;
+                background-color: #fff;
+            }
+            table.excel-grid {
                 border-collapse: collapse;
                 width: 100%;
-                font-size: 13px;
+                table-layout: fixed;
+            }
+            table.excel-grid th, table.excel-grid td {
+                border: 1px solid #d4d4d4;
+                padding: 5px 8px;
+                font-size: 12px;
+                overflow: hidden;
+                text-overflow: ellipsis;
                 white-space: nowrap;
             }
-            .excel-table td, .excel-table th {
-                border: 1px solid #d4d4d4;
-                padding: 6px 10px;
-                vertical-align: middle;
-            }
-            .excel-table th {
-                background-color: #eaedf0;
+            /* Fila y columna de índices estilo Excel (A, B, C... 1, 2, 3...) */
+            table.excel-grid th {
+                background-color: #f2f2f2;
                 color: #333;
-                font-weight: bold;
                 text-align: center;
+                font-weight: normal;
+                position: sticky;
+                top: 0;
+                z-index: 10;
             }
-            .excel-table tr:hover {
-                background-color: #f8f9fa;
+            table.excel-grid td:first-child, table.excel-grid th:first-child {
+                background-color: #f2f2f2;
+                width: 40px;
+                text-align: center;
+                color: #555;
+                position: sticky;
+                left: 0;
+                z-index: 5;
+            }
+            table.excel-grid tr:hover {
+                background-color: #f9fbfd;
             }
         </style>
     </head>
     <body>
-        <div class="excel-container">
-            <h2>Inventario La 48</h2>
-            <div class="table-responsive">
-                {{ tabla_html | safe }}
+        <div class="excel-window">
+            <div class="excel-header-bar">
+                <span>🟢 INVENTARIO LA 48 (Solo Vista)</span>
+                <span style="font-size: 12px; font-weight: normal;">Modo Seguro</span>
+            </div>
+            <div class="excel-container">
+                <table class="excel-grid">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            {% for col in range(1, data[0]|length + 1) %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row_idx in range(data|length) %}
+                        <tr>
+                            <td>{{ row_idx + 1 }}</td>
+                            {% for cell in data[row_idx] %}
+                            <td>
+                                {% if cell is boolean %}
+                                    <input type="checkbox" {% if cell %}checked{% endif %} disabled style="transform: scale(0.9);">
+                                {% elif cell is not none %}
+                                    {{ cell }}
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </body>
     </html>
     """
-  return render_template_string(template, tabla_html=tabla_html)
+  return render_template_string(template, data=data)
 
 
 if __name__ == "__main__":
