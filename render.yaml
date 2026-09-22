@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: inventario-la-48
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
